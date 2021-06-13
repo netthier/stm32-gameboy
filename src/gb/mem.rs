@@ -137,7 +137,8 @@ impl IoRegs {
             0xFF02 => {} // no-op for now
             0xFF04..=0xFF07 => self.tim_div[addr - 0xFF04] = val,
             0xFF0F => self.int_f = val,
-            0xFF42 => {} //no-op for now
+            0xFF24..=0xFF26 => {} // no-op for now
+            0xFF42 => {}          //no-op for now
             _ => {
                 hprintln!(
                     "Tried to write {:X} to unimplemented IO register at {:X}",

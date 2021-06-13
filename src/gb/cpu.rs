@@ -52,7 +52,7 @@ impl Cpu {
         let step = match instr {
             [0x0, 0x0] => 1, // NOP
             [0x0, 0x8] => self.ld_u16p_sp(),
-            [0x1, 0x0] => unimplemented!(), //TODO STOP
+            [0x1, 0x0] => 2, //TODO STOP
             [0x1, 0x8] => self.jr(),
             [0x2 | 0x3, 0x0 | 0x8] => self.jr_cond(),
             [0x0..=0x3, 0x1] => self.ld_r16_u16(),
@@ -72,7 +72,7 @@ impl Cpu {
             [0xE, 0x0] => self.ld_io_u8_a(),
             [0xE, 0x8] => self.add_sp_i8(),
             [0xF, 0x0] => self.ld_a_io_u8(),
-            [0xF, 0x7] => self.ld_hl_sp_i8(),
+            [0xF, 0x8] => self.ld_hl_sp_i8(),
             [0xC..=0xF, 0x1] => self.pop_r16(),
             [0xC, 0x9] => self.ret(),
             [0xD, 0x9] => self.reti(),
@@ -217,32 +217,24 @@ impl Cpu {
                 }
             }
             0x4 => {
-                let mut correction = 0;
-                let mut value = a;
-
-                let mut set_carry = false;
+                let mut u = 0;
                 if self.get_flag(Flag::H) || (!self.get_flag(Flag::N) && (a & 0xF) > 9) {
-                    correction |= 0x6;
+                    u = 6;
                 }
-
                 if self.get_flag(Flag::C) || (!self.get_flag(Flag::N) && a > 0x99) {
-                    correction |= 0x60;
-                    set_carry = true;
+                    u |= 0x60;
+                    self.set_flag(Flag::C, true);
                 }
 
-                value = value.wrapping_add(if self.get_flag(Flag::N) {
-                    !correction
+                let res = if self.get_flag(Flag::N) {
+                    a.wrapping_sub(u)
                 } else {
-                    correction
-                });
+                    a.wrapping_add(u)
+                };
 
-                let set_zero = !self.get_flag(Flag::Z);
-
-                self.set_flag(Flag::Z, set_zero);
+                self.set_flag(Flag::Z, res == 0);
                 self.set_flag(Flag::H, false);
-                self.set_flag(Flag::C, set_carry);
-
-                self.af.as_8bit()[1] = value;
+                self.af.as_8bit()[1] = res;
             }
             0x5 => {
                 self.set_flag(Flag::N, true);
@@ -469,7 +461,7 @@ impl Cpu {
                 self.set_flag(Flag::N, false);
                 self.set_flag(Flag::H, false);
 
-                self.set_decoded_low_r8(val);
+                self.set_decoded_low_r8(res);
             }
             0x4..=0x7 => {
                 self.set_flag(Flag::Z, (val & (0x1 << bits)) == 0x0);

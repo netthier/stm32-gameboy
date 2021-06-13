@@ -12,7 +12,7 @@ impl Cartridge {
         Some(Self {
             cart_type: FromPrimitive::from_u8(bytes[0x0147])?,
             bytes,
-            bank_idx: 0,
+            bank_idx: 1,
         })
     }
 
@@ -21,7 +21,7 @@ impl Cartridge {
             CartridgeType::RomOnly => self.bytes[addr],
             CartridgeType::Mbc1 => match addr {
                 0x0000..=0x3FFF => self.bytes[addr],
-                _ => self.bytes[addr + 0x4000 * self.bank_idx],
+                _ => self.bytes[addr + 0x4000 * (self.bank_idx - 1)],
             },
             _ => {
                 hprintln!("Unimplemented cartridge type {:?}", self.cart_type);
@@ -31,8 +31,20 @@ impl Cartridge {
     }
 
     pub fn write(&mut self, addr: usize, val: u8) {
-        hprintln!("Tried to write {:X} to {:X} in cartridge", val, addr);
-        panic!();
+        match self.cart_type {
+            CartridgeType::RomOnly => {
+                hprintln!("Tried to write {:X} to {:X} in cartridge", val, addr);
+                panic!();
+            }
+            CartridgeType::Mbc1 => match addr {
+                0x2000..=0x3FFF => self.bank_idx = (val & 0x1F) as usize,
+                _ => unimplemented!(),
+            },
+            _ => {
+                hprintln!("Unimplemented cartridge type {:?}", self.cart_type);
+                panic!();
+            }
+        }
     }
 }
 
