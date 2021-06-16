@@ -1,6 +1,8 @@
 # stm32-gameboy
 Gameboy emulator for the STM32F3DISCOVERY, written in Rust.
 
+Performance is absolute garbage, don't expect much.
+
 TODO: Everything.
 
 Blargg's tests:

@@ -1,5 +1,6 @@
 use crate::gb::mem::SharedMem;
 
+use crate::coroutines::yield_now;
 use cortex_m_semihosting::hprintln;
 
 pub struct Cpu {
@@ -45,168 +46,166 @@ impl Cpu {
         }
     }
 
-    pub fn step(&mut self) {
-        let instr = self.get_instr_nibbles();
+    pub async fn step(&mut self) {
+        let instr = self.get_instr_nibbles().await;
 
         self.current_instr = instr;
         let step = match instr {
             [0x0, 0x0] => 1, // NOP
-            [0x0, 0x8] => self.ld_u16p_sp(),
-            [0x1, 0x0] => 2, //TODO STOP
-            [0x1, 0x8] => self.jr(),
-            [0x2 | 0x3, 0x0 | 0x8] => self.jr_cond(),
-            [0x0..=0x3, 0x1] => self.ld_r16_u16(),
-            [0x0..=0x3, 0x9] => self.add_hl_r16(),
-            [0x0..=0x3, 0x2] => self.ld_r16p_a(),
-            [0x0..=0x3, 0xA] => self.ld_a_r16p(),
-            [0x0..=0x3, 0x3] => self.inc_r16(),
-            [0x0..=0x3, 0xB] => self.dec_r16(),
-            [0x0..=0x3, 0x4 | 0xC] => self.inc_r8(),
-            [0x0..=0x3, 0x5 | 0xD] => self.dec_r8(),
-            [0x0..=0x3, 0x6 | 0xE] => self.ld_r8_u8(),
-            [0x0..=0x3, 0x7 | 0xF] => self.af_ops(),
+            [0x0, 0x8] => self.ld_u16p_sp().await,
+            [0x1, 0x0] => 2,
+            [0x1, 0x8] => self.jr().await,
+            [0x2 | 0x3, 0x0 | 0x8] => self.jr_cond().await,
+            [0x0..=0x3, 0x1] => self.ld_r16_u16().await,
+            [0x0..=0x3, 0x9] => self.add_hl_r16().await,
+            [0x0..=0x3, 0x2] => self.ld_r16p_a().await,
+            [0x0..=0x3, 0xA] => self.ld_a_r16p().await,
+            [0x0..=0x3, 0x3] => self.inc_r16().await,
+            [0x0..=0x3, 0xB] => self.dec_r16().await,
+            [0x0..=0x3, 0x4 | 0xC] => self.inc_r8().await,
+            [0x0..=0x3, 0x5 | 0xD] => self.dec_r8().await,
+            [0x0..=0x3, 0x6 | 0xE] => self.ld_r8_u8().await,
+            [0x0..=0x3, 0x7 | 0xF] => self.af_ops().await,
             [0x7, 0x6] => unimplemented!(), //TODO HALT
-            [0x4..=0x7, 0x0..=0xF] => self.ld_r8_r8(),
-            [0x8..=0xB, 0x0..=0xF] => self.alu_a_r8(),
-            [0xC | 0xD, 0x0 | 0x8] => self.ret_cond(),
-            [0xE, 0x0] => self.ld_io_u8_a(),
-            [0xE, 0x8] => self.add_sp_i8(),
-            [0xF, 0x0] => self.ld_a_io_u8(),
-            [0xF, 0x8] => self.ld_hl_sp_i8(),
-            [0xC..=0xF, 0x1] => self.pop_r16(),
-            [0xC, 0x9] => self.ret(),
-            [0xD, 0x9] => self.reti(),
-            [0xE, 0x9] => self.jp_hl(),
-            [0xF, 0x9] => self.ld_sp_hl(),
-            [0xC | 0xD, 0x2 | 0xA] => self.jp_cond(),
-            [0xE, 0x2] => self.ld_io_c_a(),
-            [0xE, 0xA] => self.ld_u16p_a(),
-            [0xF, 0x2] => self.ld_a_io_c(),
-            [0xF, 0xA] => self.ld_a_u16p(),
-            [0xC, 0x3] => self.jp_u16(),
-            [0xC, 0xB] => self.cb(),
-            [0xF, 0x3] => self.di(),
-            [0xF, 0xB] => self.ei(),
-            [0xC | 0xD, 0x4 | 0xC] => self.call_cond(),
-            [0xC..=0xF, 0x5] => self.push_r16(),
-            [0xC, 0xD] => self.call_u16(),
-            [0xC..=0xF, 0x6 | 0xE] => self.alu_a_u8(),
-            [0xC..=0xF, 0x7 | 0xF] => self.rst(),
-            _ => {
-                hprintln!("Unimplemented instr: {:X}", self.get_instr());
-                panic!();
-            }
+            [0x4..=0x7, 0x0..=0xF] => self.ld_r8_r8().await,
+            [0x8..=0xB, 0x0..=0xF] => self.alu_a_r8().await,
+            [0xC | 0xD, 0x0 | 0x8] => self.ret_cond().await,
+            [0xE, 0x0] => self.ld_io_u8_a().await,
+            [0xE, 0x8] => self.add_sp_i8().await,
+            [0xF, 0x0] => self.ld_a_io_u8().await,
+            [0xF, 0x8] => self.ld_hl_sp_i8().await,
+            [0xC..=0xF, 0x1] => self.pop_r16().await,
+            [0xC, 0x9] => self.ret().await,
+            [0xD, 0x9] => self.reti().await,
+            [0xE, 0x9] => self.jp_hl().await,
+            [0xF, 0x9] => self.ld_sp_hl().await,
+            [0xC | 0xD, 0x2 | 0xA] => self.jp_cond().await,
+            [0xE, 0x2] => self.ld_io_c_a().await,
+            [0xE, 0xA] => self.ld_u16p_a().await,
+            [0xF, 0x2] => self.ld_a_io_c().await,
+            [0xF, 0xA] => self.ld_a_u16p().await,
+            [0xC, 0x3] => self.jp_u16().await,
+            [0xC, 0xB] => self.cb().await,
+            [0xF, 0x3] => self.di().await,
+            [0xF, 0xB] => self.ei().await,
+            [0xC | 0xD, 0x4 | 0xC] => self.call_cond().await,
+            [0xC..=0xF, 0x5] => self.push_r16().await,
+            [0xC, 0xD] => self.call_u16().await,
+            [0xC..=0xF, 0x6 | 0xE] => self.alu_a_u8().await,
+            [0xC..=0xF, 0x7 | 0xF] => self.rst().await,
+            _ => unimplemented!(),
         };
 
         self.set_pc(PcMode::Step(step));
     }
 
-    fn ld_u16p_sp(&mut self) -> u16 {
-        let mut mem = self.mem.borrow_mut();
-        let dest = mem.read_dword(self.pc + 1);
-        mem.write_dword(dest, self.sp);
+    async fn ld_u16p_sp(&mut self) -> u16 {
+        let dest = self.read_dword(self.pc + 1).await;
+        self.write_dword(dest, self.sp).await;
         3
     }
 
-    fn jr(&mut self) -> u16 {
+    async fn jr(&mut self) -> u16 {
         let offset = {
-            let mut mem = self.mem.borrow_mut();
-            mem.cycles += 4;
-            mem.read_word(self.pc + 1) as i8
+            yield_now().await;
+            self.read_word(self.pc + 1).await as i8
         };
 
         self.set_pc(PcMode::RelJump(offset));
         2
     }
 
-    fn jr_cond(&mut self) -> u16 {
-        let offset = self.mem.borrow_mut().read_word(self.pc + 1) as i8;
+    async fn jr_cond(&mut self) -> u16 {
+        let offset = self.read_word(self.pc + 1).await as i8;
         if self.decode_condition() {
-            self.mem.borrow_mut().cycles += 4;
+            yield_now().await;
             self.set_pc(PcMode::RelJump(offset));
         }
         2
     }
 
-    fn ld_r16_u16(&mut self) -> u16 {
-        let val = self.mem.borrow_mut().read_dword(self.pc + 1);
+    async fn ld_r16_u16(&mut self) -> u16 {
+        let val = self.read_dword(self.pc + 1).await;
         *self.mut_decoded_r16_1() = val;
         3
     }
 
-    fn add_hl_r16(&mut self) -> u16 {
-        let val = *self.hl.as_16bit();
+    async fn add_hl_r16(&mut self) -> u16 {
+        let val = *self.hl;
         let rhs = *self.mut_decoded_r16_1();
         self.set_flag(Flag::N, false);
-        self.set_flag(Flag::H, ((val & 0x0F00) + (rhs & 0x0F00)) & 0x10 == 0x10);
+        self.set_flag(
+            Flag::H,
+            ((val & 0x0FFF) + (rhs & 0x0FFF)) & 0x1000 == 0x1000,
+        );
         let (res, wrap) = val.overflowing_add(rhs);
         self.set_flag(Flag::C, wrap);
-        *self.hl.as_16bit() = res;
-        self.mem.borrow_mut().cycles += 4;
+        *self.hl = res;
+        yield_now().await;
         1
     }
 
-    fn ld_r16p_a(&mut self) -> u16 {
-        let val = self.af.as_8bit()[1];
-        self.set_decoded_r16_2_mem(val);
+    async fn ld_r16p_a(&mut self) -> u16 {
+        let val = self.af[0];
+        self.set_decoded_r16_2_mem(val).await;
         1
     }
 
-    fn ld_a_r16p(&mut self) -> u16 {
-        self.af.as_8bit()[1] = self.get_decoded_r16_2_mem();
+    async fn ld_a_r16p(&mut self) -> u16 {
+        self.af[0] = self.get_decoded_r16_2_mem().await;
         1
     }
 
-    fn inc_r16(&mut self) -> u16 {
+    async fn inc_r16(&mut self) -> u16 {
         *self.mut_decoded_r16_1() = self.mut_decoded_r16_1().wrapping_add(1);
-        self.mem.borrow_mut().cycles += 4;
+        yield_now().await;
         1
     }
 
-    fn dec_r16(&mut self) -> u16 {
+    async fn dec_r16(&mut self) -> u16 {
         *self.mut_decoded_r16_1() = self.mut_decoded_r16_1().wrapping_sub(1);
-        self.mem.borrow_mut().cycles += 4;
+        yield_now().await;
         1
     }
 
-    fn inc_r8(&mut self) -> u16 {
-        let val = self.get_decoded_high_r8();
+    async fn inc_r8(&mut self) -> u16 {
+        let val = self.get_decoded_high_r8().await;
         self.set_flag(Flag::Z, val == 0xFF);
         self.set_flag(Flag::N, false);
         self.set_flag(Flag::H, (val & 0xF) == 0xF);
-        self.set_decoded_high_r8(val.wrapping_add(1));
+        self.set_decoded_high_r8(val.wrapping_add(1)).await;
         1
     }
 
-    fn dec_r8(&mut self) -> u16 {
-        let val = self.get_decoded_high_r8();
+    async fn dec_r8(&mut self) -> u16 {
+        let val = self.get_decoded_high_r8().await;
         self.set_flag(Flag::Z, val == 0x01);
         self.set_flag(Flag::N, true);
         self.set_flag(Flag::H, (val & 0xF) == 0x0);
-        self.set_decoded_high_r8(val.wrapping_sub(1));
+        self.set_decoded_high_r8(val.wrapping_sub(1)).await;
         1
     }
 
-    fn ld_r8_u8(&mut self) -> u16 {
-        let val = self.mem.borrow_mut().read_word(self.pc + 1);
-        self.set_decoded_high_r8(val);
+    async fn ld_r8_u8(&mut self) -> u16 {
+        let val = self.read_word(self.pc + 1).await;
+        self.set_decoded_high_r8(val).await;
         2
     }
 
-    fn af_ops(&mut self) -> u16 {
+    async fn af_ops(&mut self) -> u16 {
         let bits = self.calc_high_bits();
-        let [_, a] = *self.af.as_8bit();
+        let a = self.af[0];
         match bits {
             0x0..=0x3 => {
                 self.set_flag(Flag::Z, false);
                 self.set_flag(Flag::N, false);
                 self.set_flag(Flag::H, false);
 
-                self.af.as_8bit()[1] = match bits {
+                self.af[0] = match bits {
                     0x0 => a.rotate_left(1),
                     0x1 => a.rotate_right(1),
                     0x2 => (a << 1) | self.get_flag(Flag::C) as u8,
-                    0x3 => (a >> 1) | (self.get_flag(Flag::C) as u8).rotate_right(1),
+                    0x3 => (a >> 1) | ((self.get_flag(Flag::C) as u8) << 7),
                     _ => unreachable!(),
                 };
 
@@ -234,12 +233,12 @@ impl Cpu {
 
                 self.set_flag(Flag::Z, res == 0);
                 self.set_flag(Flag::H, false);
-                self.af.as_8bit()[1] = res;
+                self.af[0] = res;
             }
             0x5 => {
                 self.set_flag(Flag::N, true);
                 self.set_flag(Flag::H, true);
-                self.af.as_8bit()[1] = !a
+                self.af[0] = !a
             }
             0x6 => {
                 self.set_flag(Flag::N, false);
@@ -257,23 +256,23 @@ impl Cpu {
         1
     }
 
-    fn ld_r8_r8(&mut self) -> u16 {
-        let val = self.get_decoded_low_r8();
-        self.set_decoded_high_r8(val);
+    async fn ld_r8_r8(&mut self) -> u16 {
+        let val = self.get_decoded_low_r8().await;
+        self.set_decoded_high_r8(val).await;
         1
     }
 
-    fn alu_a_r8(&mut self) -> u16 {
-        let rhs = self.get_decoded_low_r8();
-        self.af.as_8bit()[1] = self.alu(rhs);
+    async fn alu_a_r8(&mut self) -> u16 {
+        let rhs = self.get_decoded_low_r8().await;
+        self.af[0] = self.alu(rhs);
         1
     }
 
-    fn ret_cond(&mut self) -> u16 {
-        self.mem.borrow_mut().cycles += 4;
+    async fn ret_cond(&mut self) -> u16 {
+        yield_now().await;
         if self.decode_condition() {
-            self.mem.borrow_mut().cycles += 4;
-            let dest = self.pop();
+            yield_now().await;
+            let dest = self.pop().await;
             self.set_pc(PcMode::Jump(dest));
             0
         } else {
@@ -281,99 +280,83 @@ impl Cpu {
         }
     }
 
-    fn ld_io_u8_a(&mut self) -> u16 {
-        let mut mem = self.mem.borrow_mut();
-        let offset = mem.read_word(self.pc + 1) as u16;
-        mem.write_word(0xFF00 + offset, self.af.as_8bit()[1]);
+    async fn ld_io_u8_a(&mut self) -> u16 {
+        let offset = self.read_word(self.pc + 1).await as u16;
+        self.write_word(0xFF00 + offset, self.af[0]).await;
         2
     }
 
-    fn add_sp_i8(&mut self) -> u16 {
-        let val = self.mem.borrow_mut().read_word(self.pc + 1) as i32;
-        let (res, wrap) = (self.sp as i32).overflowing_add(val);
+    async fn add_sp_i8(&mut self) -> u16 {
+        let val = self.read_word(self.pc + 1).await as i8 as u16;
+        let res = self.sp.wrapping_add(val);
         self.set_flag(Flag::Z, false);
         self.set_flag(Flag::N, false);
-        self.set_flag(
-            Flag::H,
-            if val >= 0 {
-                (self.sp & 0xF) + (val as u16 & 0xF) > 0xF
-            } else {
-                false
-            },
-        );
-        self.set_flag(Flag::C, wrap);
+        self.set_flag(Flag::H, (self.sp & 0xF) + (val & 0xF) > 0xF);
+        self.set_flag(Flag::C, (self.sp & 0xFF) + (val & 0xFF) > 0xFF);
 
-        self.sp = res as u16;
+        self.sp = res;
         2
     }
 
-    fn ld_a_io_u8(&mut self) -> u16 {
-        let mut mem = self.mem.borrow_mut();
-        let offset = mem.read_word(self.pc + 1) as u16;
-        self.af.as_8bit()[1] = mem.read_word(0xFF00 + offset);
+    async fn ld_a_io_u8(&mut self) -> u16 {
+        let offset = self.read_word(self.pc + 1).await as u16;
+        self.af[0] = self.read_word(0xFF00 + offset).await;
         2
     }
 
-    fn ld_hl_sp_i8(&mut self) -> u16 {
-        let val = self.mem.borrow_mut().read_word(self.pc + 1) as i32;
-        let (res, wrap) = (self.sp as i32).overflowing_add(val);
+    async fn ld_hl_sp_i8(&mut self) -> u16 {
+        let val = self.read_word(self.pc + 1).await as i8 as u16;
+        let res = self.sp.wrapping_add(val);
         self.set_flag(Flag::Z, false);
         self.set_flag(Flag::N, false);
-        self.set_flag(
-            Flag::H,
-            if val >= 0 {
-                (self.sp & 0xF) + (val as u16 & 0xF) > 0xF
-            } else {
-                false
-            },
-        );
-        self.set_flag(Flag::C, wrap);
+        self.set_flag(Flag::H, (self.sp & 0xF) + (val & 0xF) > 0xF);
+        self.set_flag(Flag::C, (self.sp & 0xFF) + (val & 0xFF) > 0xFF);
 
-        *self.hl.as_16bit() = res as u16;
+        *self.hl = res;
 
         2
     }
 
-    fn ld_sp_hl(&mut self) -> u16 {
-        self.mem.borrow_mut().cycles += 4;
-        self.sp = *self.hl.as_16bit();
+    async fn ld_sp_hl(&mut self) -> u16 {
+        yield_now().await;
+        self.sp = *self.hl;
         1
     }
 
-    fn jp_hl(&mut self) -> u16 {
-        let dest = *self.hl.as_16bit();
+    async fn jp_hl(&mut self) -> u16 {
+        let dest = *self.hl;
         self.set_pc(PcMode::Jump(dest));
         0
     }
 
-    fn pop_r16(&mut self) -> u16 {
-        *self.mut_decoded_r16_3() = self.pop();
+    async fn pop_r16(&mut self) -> u16 {
+        *self.mut_decoded_r16_3() = self.pop().await;
 
         // Edge case - POP AF does not write lower 4 bits of F
-        self.af.as_8bit()[0] &= 0xF0;
+        self.af[1] &= 0xF0;
 
         1
     }
 
-    fn ret(&mut self) -> u16 {
-        self.mem.borrow_mut().cycles += 4;
-        let dest = self.pop();
+    async fn ret(&mut self) -> u16 {
+        yield_now().await;
+        let dest = self.pop().await;
         self.set_pc(PcMode::Jump(dest));
         0
     }
 
-    fn reti(&mut self) -> u16 {
+    async fn reti(&mut self) -> u16 {
         self.ime = true;
-        self.mem.borrow_mut().cycles += 4;
-        let dest = self.pop();
+        yield_now().await;
+        let dest = self.pop().await;
         self.set_pc(PcMode::Jump(dest));
         0
     }
 
-    fn jp_cond(&mut self) -> u16 {
-        let dest = self.mem.borrow_mut().read_dword(self.pc + 1);
+    async fn jp_cond(&mut self) -> u16 {
+        let dest = self.read_dword(self.pc + 1).await;
         if self.decode_condition() {
-            self.mem.borrow_mut().cycles += 4;
+            yield_now().await;
             self.set_pc(PcMode::Jump(dest));
             0
         } else {
@@ -381,51 +364,46 @@ impl Cpu {
         }
     }
 
-    fn ld_io_c_a(&mut self) -> u16 {
-        let offset = self.bc.as_8bit()[0] as u16;
-        self.mem
-            .borrow_mut()
-            .write_word(0xFF00 + offset, self.af.as_8bit()[1]);
+    async fn ld_io_c_a(&mut self) -> u16 {
+        let offset = self.bc[1] as u16;
+        self.write_word(0xFF00 + offset, self.af[0]).await;
         1
     }
 
-    fn ld_u16p_a(&mut self) -> u16 {
-        let mut mem = self.mem.borrow_mut();
-        let dest = mem.read_dword(self.pc + 1);
-        mem.write_word(dest, self.af.as_8bit()[1]);
+    async fn ld_u16p_a(&mut self) -> u16 {
+        let dest = self.read_dword(self.pc + 1).await;
+        self.write_word(dest, self.af[0]).await;
         3
     }
 
-    fn ld_a_io_c(&mut self) -> u16 {
-        let offset = self.bc.as_8bit()[0] as u16;
-        self.af.as_8bit()[1] = self.mem.borrow_mut().read_word(0xFF00 + offset);
+    async fn ld_a_io_c(&mut self) -> u16 {
+        let offset = self.bc[1] as u16;
+        self.af[0] = self.read_word(0xFF00 + offset).await;
         1
     }
 
-    fn ld_a_u16p(&mut self) -> u16 {
-        let mut mem = self.mem.borrow_mut();
-        let src = mem.read_dword(self.pc + 1);
-        self.af.as_8bit()[1] = mem.read_word(src);
+    async fn ld_a_u16p(&mut self) -> u16 {
+        let src = self.read_dword(self.pc + 1).await;
+        self.af[0] = self.read_word(src).await;
         3
     }
 
-    fn jp_u16(&mut self) -> u16 {
+    async fn jp_u16(&mut self) -> u16 {
         let dest = {
-            let mut mem = self.mem.borrow_mut();
-            mem.cycles += 4;
-            mem.read_dword(self.pc + 1)
+            yield_now().await;
+            self.read_dword(self.pc + 1).await
         };
 
         self.set_pc(PcMode::Jump(dest));
         0
     }
 
-    fn cb(&mut self) -> u16 {
+    async fn cb(&mut self) -> u16 {
         self.set_pc(PcMode::Step(1));
-        self.current_instr = self.get_instr_nibbles();
+        self.current_instr = self.get_instr_nibbles().await;
 
         let bits = self.calc_high_bits();
-        let val = self.get_decoded_low_r8();
+        let val = self.get_decoded_low_r8().await;
 
         match self.current_instr[0] {
             0x0..=0x3 => {
@@ -461,35 +439,35 @@ impl Cpu {
                 self.set_flag(Flag::N, false);
                 self.set_flag(Flag::H, false);
 
-                self.set_decoded_low_r8(res);
+                self.set_decoded_low_r8(res).await;
             }
             0x4..=0x7 => {
                 self.set_flag(Flag::Z, (val & (0x1 << bits)) == 0x0);
                 self.set_flag(Flag::N, false);
                 self.set_flag(Flag::H, true);
             }
-            0x8..=0xB => self.set_decoded_low_r8(val & !(0x1 << bits)),
-            0xC..=0xF => self.set_decoded_low_r8(val | (0x1 << bits)),
+            0x8..=0xB => self.set_decoded_low_r8(val & !(0x1 << bits)).await,
+            0xC..=0xF => self.set_decoded_low_r8(val | (0x1 << bits)).await,
             _ => unreachable!(),
         }
         1
     }
 
-    fn di(&mut self) -> u16 {
+    async fn di(&mut self) -> u16 {
         self.ime = false;
         1
     }
 
-    fn ei(&mut self) -> u16 {
+    async fn ei(&mut self) -> u16 {
         self.ime = true;
         1
     }
 
-    fn call_cond(&mut self) -> u16 {
-        let dest = self.mem.borrow_mut().read_dword(self.pc + 1);
+    async fn call_cond(&mut self) -> u16 {
+        let dest = self.read_dword(self.pc + 1).await;
         if self.decode_condition() {
-            self.mem.borrow_mut().cycles += 4;
-            self.push(self.pc + 3);
+            yield_now().await;
+            self.push(self.pc + 3).await;
             self.set_pc(PcMode::Jump(dest));
             0
         } else {
@@ -497,38 +475,38 @@ impl Cpu {
         }
     }
 
-    fn push_r16(&mut self) -> u16 {
-        self.mem.borrow_mut().cycles += 4;
+    async fn push_r16(&mut self) -> u16 {
+        yield_now().await;
         let val = *self.mut_decoded_r16_3();
-        self.push(val);
+        self.push(val).await;
         1
     }
 
-    fn call_u16(&mut self) -> u16 {
-        let dest = self.mem.borrow_mut().read_dword(self.pc + 1);
-        self.mem.borrow_mut().cycles += 4;
-        self.push(self.pc + 3);
+    async fn call_u16(&mut self) -> u16 {
+        let dest = self.read_dword(self.pc + 1).await;
+        yield_now().await;
+        self.push(self.pc + 3).await;
         self.set_pc(PcMode::Jump(dest));
         0
     }
 
-    fn alu_a_u8(&mut self) -> u16 {
-        let rhs = self.mem.borrow_mut().read_word(self.pc + 1);
-        self.af.as_8bit()[1] = self.alu(rhs);
+    async fn alu_a_u8(&mut self) -> u16 {
+        let rhs = self.read_word(self.pc + 1).await;
+        self.af[0] = self.alu(rhs);
         2
     }
 
-    fn rst(&mut self) -> u16 {
+    async fn rst(&mut self) -> u16 {
         let bits = self.calc_high_bits() as u16;
-        self.mem.borrow_mut().cycles += 4;
-        self.push(self.pc + 1);
+        yield_now().await;
+        self.push(self.pc + 1).await;
         self.set_pc(PcMode::Jump(bits << 3));
         0
     }
 
     fn alu(&mut self, rhs: u8) -> u8 {
         let bits = self.calc_high_bits();
-        let [_, a] = *self.af.as_8bit();
+        let a = self.af[0];
         match bits {
             0x0 => {
                 let (res, wrap) = a.overflowing_add(rhs);
@@ -602,39 +580,39 @@ impl Cpu {
         }
     }
 
-    fn get_decoded_low_r8(&mut self) -> u8 {
+    async fn get_decoded_low_r8(&mut self) -> u8 {
         let bits = self.current_instr[1] & 0x7;
-        self._get_decoded_r8(bits)
+        self._get_decoded_r8(bits).await
     }
 
-    fn set_decoded_low_r8(&mut self, val: u8) {
+    async fn set_decoded_low_r8(&mut self, val: u8) {
         let bits = self.current_instr[1] & 0x7;
-        self._set_decoded_r8(bits, val);
+        self._set_decoded_r8(bits, val).await;
     }
 
-    fn get_decoded_high_r8(&mut self) -> u8 {
+    async fn get_decoded_high_r8(&mut self) -> u8 {
         let bits = self.calc_high_bits();
-        self._get_decoded_r8(bits)
+        self._get_decoded_r8(bits).await
     }
 
-    fn set_decoded_high_r8(&mut self, val: u8) {
+    async fn set_decoded_high_r8(&mut self, val: u8) {
         let bits = self.calc_high_bits();
-        self._set_decoded_r8(bits, val);
+        self._set_decoded_r8(bits, val).await;
     }
 
     /// DO NOT USE
-    fn _get_decoded_r8(&mut self, bits: u8) -> u8 {
+    async fn _get_decoded_r8(&mut self, bits: u8) -> u8 {
         if bits == 6 {
-            self.mem.borrow_mut().read_word(*self.hl.as_16bit())
+            self.read_word(*self.hl).await
         } else {
             *self._mut_decoded_r8(bits)
         }
     }
 
     /// DO NOT USE
-    fn _set_decoded_r8(&mut self, bits: u8, val: u8) {
+    async fn _set_decoded_r8(&mut self, bits: u8, val: u8) {
         if bits == 6 {
-            self.mem.borrow_mut().write_word(*self.hl.as_16bit(), val);
+            self.write_word(*self.hl, val).await;
         } else {
             *self._mut_decoded_r8(bits) = val;
         }
@@ -642,13 +620,13 @@ impl Cpu {
 
     /// DO NOT USE
     fn _mut_decoded_r8(&mut self, bits: u8) -> &mut u8 {
-        let idx = (bits as usize + 1) % 2;
+        let idx = (bits) % 2;
         match bits {
-            0x0 | 0x1 => &mut self.bc.as_8bit()[idx],
-            0x2 | 0x3 => &mut self.de.as_8bit()[idx],
-            0x4 | 0x5 => &mut self.hl.as_8bit()[idx],
+            0x0 | 0x1 => &mut self.bc[idx],
+            0x2 | 0x3 => &mut self.de[idx],
+            0x4 | 0x5 => &mut self.hl[idx],
             0x6 => panic!("Tried to get mutable reference to memory"),
-            0x7 => &mut self.af.as_8bit()[1],
+            0x7 => &mut self.af[0],
             _ => unreachable!(),
         }
     }
@@ -656,38 +634,38 @@ impl Cpu {
     fn mut_decoded_r16_1(&mut self) -> &mut u16 {
         let bits = self.current_instr[0] & 0x3;
         match bits {
-            0x0 => self.bc.as_16bit(),
-            0x1 => self.de.as_16bit(),
-            0x2 => self.hl.as_16bit(),
+            0x0 => &mut self.bc,
+            0x1 => &mut self.de,
+            0x2 => &mut self.hl,
             0x3 => &mut self.sp,
             _ => unreachable!(),
         }
     }
 
-    fn get_decoded_r16_2_mem(&mut self) -> u8 {
+    async fn get_decoded_r16_2_mem(&mut self) -> u8 {
         let decoded = self._get_decoded_r16_2();
-        self.mem.borrow_mut().read_word(decoded)
+        self.read_word(decoded).await
     }
 
-    fn set_decoded_r16_2_mem(&mut self, val: u8) {
+    async fn set_decoded_r16_2_mem(&mut self, val: u8) {
         let decoded = self._get_decoded_r16_2();
-        self.mem.borrow_mut().write_word(decoded, val);
+        self.write_word(decoded, val).await;
     }
 
     /// DO NOT USE
     fn _get_decoded_r16_2(&mut self) -> u16 {
         let bits = self.current_instr[0] & 0x3;
         match bits {
-            0x0 => *self.bc.as_16bit(),
-            0x1 => *self.de.as_16bit(),
+            0x0 => *self.bc,
+            0x1 => *self.de,
             0x2 => {
-                let old = *self.hl.as_16bit();
-                *self.hl.as_16bit() = old.wrapping_add(1);
+                let old = *self.hl;
+                *self.hl = old.wrapping_add(1);
                 old
             }
             0x3 => {
-                let old = *self.hl.as_16bit();
-                *self.hl.as_16bit() = old.wrapping_sub(1);
+                let old = *self.hl;
+                *self.hl = old.wrapping_sub(1);
                 old
             }
             _ => unreachable!(),
@@ -697,10 +675,10 @@ impl Cpu {
     fn mut_decoded_r16_3(&mut self) -> &mut u16 {
         let bits = self.current_instr[0] & 0x3;
         match bits {
-            0x0 => self.bc.as_16bit(),
-            0x1 => self.de.as_16bit(),
-            0x2 => self.hl.as_16bit(),
-            0x3 => self.af.as_16bit(),
+            0x0 => &mut self.bc,
+            0x1 => &mut self.de,
+            0x2 => &mut self.hl,
+            0x3 => &mut self.af,
             _ => unreachable!(),
         }
     }
@@ -710,7 +688,7 @@ impl Cpu {
     }
 
     fn decode_condition(&mut self) -> bool {
-        let bits = ((self.current_instr[0] & 0x1) << 1) + ((self.current_instr[1] & 0xF) >> 3);
+        let bits = ((self.current_instr[0] & 0x1) << 1) + ((self.current_instr[1] & 0x8) >> 3);
         match bits {
             0 => !self.get_flag(Flag::Z),
             1 => self.get_flag(Flag::Z),
@@ -720,19 +698,17 @@ impl Cpu {
         }
     }
 
-    fn push(&mut self, val: u16) {
-        let mut mem = self.mem.borrow_mut();
+    async fn push(&mut self, val: u16) {
         self.sp -= 1;
-        mem.write_word(self.sp, (val & 0xFF) as u8);
+        self.write_word(self.sp, ((val & 0xFF00) >> 8) as u8).await;
         self.sp -= 1;
-        mem.write_word(self.sp, ((val & 0xFF00) >> 8) as u8);
+        self.write_word(self.sp, (val & 0xFF) as u8).await;
     }
 
-    fn pop(&mut self) -> u16 {
-        let mut mem = self.mem.borrow_mut();
-        let high = mem.read_word(self.sp) as u16;
+    async fn pop(&mut self) -> u16 {
+        let low = self.read_word(self.sp).await as u16;
         self.sp += 1;
-        let low = mem.read_word(self.sp) as u16;
+        let high = self.read_word(self.sp).await as u16;
         self.sp += 1;
 
         (high << 8) + low
@@ -742,21 +718,21 @@ impl Cpu {
         match mode {
             PcMode::Step(e) => self.pc += e,
             PcMode::Jump(dest) => self.pc = dest,
-            PcMode::RelJump(dest) => self.pc = (self.pc as i32 + dest as i32) as u16,
+            PcMode::RelJump(dest) => self.pc = self.pc.wrapping_add(dest as u16),
         }
     }
 
-    fn get_instr(&self) -> u8 {
-        self.mem.borrow_mut().read_word(self.pc)
+    async fn get_instr(&mut self) -> u8 {
+        self.read_word(self.pc).await
     }
 
-    fn get_instr_nibbles(&self) -> [u8; 2] {
-        let instr = self.get_instr();
+    async fn get_instr_nibbles(&mut self) -> [u8; 2] {
+        let instr = self.get_instr().await;
         [(instr & 0xF0) >> 4, instr & 0x0F]
     }
 
     fn set_flag(&mut self, flag: Flag, val: bool) {
-        let z = &mut self.af.as_8bit()[0];
+        let z = &mut self.af[1];
         if val {
             *z |= flag as u8;
         } else {
@@ -765,13 +741,37 @@ impl Cpu {
     }
 
     fn get_flag(&mut self, flag: Flag) -> bool {
-        let mut z = self.af.as_8bit()[0];
+        let mut z = self.af[1];
         z &= flag as u8;
         z == flag as u8
     }
+
+    // Required so that memory accesses yield, and double-word accesses dont panic
+    async fn read_word(&mut self, addr: u16) -> u8 {
+        let val = self.mem.borrow_mut().read_word(addr);
+        yield_now().await;
+        val
+    }
+
+    async fn write_word(&mut self, addr: u16, val: u8) {
+        self.mem.borrow_mut().write_word(addr, val);
+        yield_now().await;
+    }
+
+    async fn read_dword(&mut self, addr: u16) -> u16 {
+        let high = self.read_word(addr + 1).await as u16;
+        let low = self.read_word(addr).await as u16;
+        (high << 8) + low
+    }
+
+    async fn write_dword(&mut self, addr: u16, val: u16) {
+        self.write_word(addr, (val & 0x00FF) as u8).await;
+        self.write_word(addr + 1, ((val & 0xFF00) >> 8) as u8).await;
+    }
 }
 
-// haha yes, cursed code. on LE, a[0] is the least-significant byte.
+// no rust project is complete without some unsafe!.
+// indexing returns registers in big-endian order, assuming a little endian host. this means af[0] returns a.
 #[derive(Copy, Clone)]
 #[repr(C)]
 union Register {
@@ -779,16 +779,48 @@ union Register {
     b: u16,
 }
 
+impl core::ops::Deref for Register {
+    type Target = u16;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &self.b }
+    }
+}
+
+impl core::ops::DerefMut for Register {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut self.b }
+    }
+}
+
+impl core::ops::Index<u8> for Register {
+    type Output = u8;
+
+    fn index(&self, index: u8) -> &Self::Output {
+        unsafe {
+            match index {
+                0 => &self.a[1],
+                1 => &self.a[0],
+                _ => unreachable!(),
+            }
+        }
+    }
+}
+
+impl core::ops::IndexMut<u8> for Register {
+    fn index_mut(&mut self, index: u8) -> &mut Self::Output {
+        unsafe {
+            match index {
+                0 => &mut self.a[1],
+                1 => &mut self.a[0],
+                _ => unreachable!(),
+            }
+        }
+    }
+}
+
 impl Register {
     pub fn new(b: u16) -> Self {
         Self { b }
-    }
-
-    pub fn as_8bit(&mut self) -> &mut [u8; 2] {
-        unsafe { &mut self.a }
-    }
-
-    pub fn as_16bit(&mut self) -> &mut u16 {
-        unsafe { &mut self.b }
     }
 }

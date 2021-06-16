@@ -14,8 +14,6 @@ pub struct Memory {
     pub io_regs: IoRegs,
     hram: Vec<u8>,
     ie: u8,
-
-    pub cycles: usize,
 }
 
 impl Memory {
@@ -29,13 +27,10 @@ impl Memory {
             io_regs: IoRegs::new(),
             hram: vec![0; 0x7F],
             ie: 0,
-
-            cycles: 0,
         }
     }
 
     pub fn read_word(&mut self, addr: u16) -> u8 {
-        self.cycles += 4;
         let addr = addr as usize;
 
         match addr {
@@ -67,14 +62,7 @@ impl Memory {
         }
     }
 
-    pub fn read_dword(&mut self, addr: u16) -> u16 {
-        let high = self.read_word(addr + 1) as u16;
-        let low = self.read_word(addr) as u16;
-        (high << 8) + low
-    }
-
     pub fn write_word(&mut self, addr: u16, val: u8) {
-        self.cycles += 4;
         let addr = addr as usize;
 
         match addr {
@@ -107,11 +95,6 @@ impl Memory {
             _ => unreachable!(),
         }
     }
-
-    pub fn write_dword(&mut self, addr: u16, val: u16) {
-        self.write_word(addr, (val & 0x00FF) as u8);
-        self.write_word(addr + 1, ((val & 0xFF00) >> 8) as u8);
-    }
 }
 
 struct Oam;
@@ -134,6 +117,7 @@ impl IoRegs {
             0xFF01 => {
                 hprint!("{}", val as char);
             }
+            0xFF00 => {}
             0xFF02 => {} // no-op for now
             0xFF04..=0xFF07 => self.tim_div[addr - 0xFF04] = val,
             0xFF0F => self.int_f = val,
